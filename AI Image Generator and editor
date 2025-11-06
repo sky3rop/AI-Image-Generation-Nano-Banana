@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Image Studio (Nano Banana)</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom font */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom class for the file input */
+        .file-input-label {
+            display: block;
+            text-align: center;
+            cursor: pointer;
+            background-color: #4f46e5; /* indigo-600 */
+            color: white;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+        .file-input-label:hover {
+            background-color: #4338ca; /* indigo-700 */
+        }
+        /* Hide the default file input */
+        #file-upload {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex items-center justify-center p-4">
+
+    <div class="w-full max-w-lg bg-gray-800 rounded-2xl shadow-2xl p-6 md:p-8">
+        <h1 class="text-3xl font-extrabold text-center mb-6 text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
+            AI Image Studio
+        </h1>
+
+        <!-- Mode Toggle -->
+        <div class="flex bg-gray-700 rounded-lg p-1 mb-6">
+            <button id="mode-generate" class="mode-btn w-1/2 py-2 rounded-md text-sm font-medium bg-purple-600 text-white">
+                Generate
+            </button>
+            <button id="mode-edit" class="mode-btn w-1/2 py-2 rounded-md text-sm font-medium text-gray-300">
+                Edit Your Pic
+            </button>
+        </div>
+
+        <!-- Image Display & Loading -->
+        <div class="aspect-square bg-gray-900 rounded-lg mb-4 flex items-center justify-center overflow-hidden border-2 border-gray-700 relative">
+            <img id="image-display" src="" alt="" class="w-full h-full object-contain hidden" />
+            <div id="image-placeholder" class="text-gray-500 text-center p-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 mx-auto text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l-1.586-1.586a2 2 0 00-2.828 0L6 14m6-6l.01.01M13 10l.01.01M10 13l.01.01M7 10l.01.01M7 13l.01.01M10 16l.01.01M13 16l.01.01M16 13l.01.01M16 10l.01.01" />
+                </svg>
+                <span id="placeholder-text">Your generated image will appear here.</span>
+            </div>
+
+            <!-- Loading Spinner -->
+            <div id="loading-spinner" class="absolute inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center hidden">
+                <svg class="animate-spin -ml-1 mr-3 h-10 w-10 text-purple-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </div>
+        </div>
+
+        <!-- Upload Button (Edit Mode Only) -->
+        <div id="upload-container" class="mb-4 hidden">
+            <label for="file-upload" class="file-input-label">
+                Upload Your Photo
+            </label>
+            <input type="file" id="file-upload" accept="image/png, image/jpeg">
+        </div>
+
+        <!-- Prompt Input -->
+        <div class="mb-4">
+            <div class="flex justify-between items-center mb-2">
+                <label for="prompt-input" class="block text-sm font-medium text-gray-300">Your Prompt</label>
+                <button id="idea-button" class="text-sm text-purple-400 hover:text-purple-300 font-medium transition-colors disabled:opacity-50 disabled:cursor-wait">
+                    ✨ Get Idea
+                </button>
+            </div>
+            <textarea id="prompt-input" rows="3" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg resize-none focus:ring-2 focus:ring-purple-500 focus:outline-none" placeholder="e.g., 'A golden retriever wearing a tiny chef hat' or 'make my hair blue'"></textarea>
+        </div>
+
+        <!-- Action Button -->
+        <button id="action-button" class="w-full py-3 px-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold rounded-lg transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+            Generate
+        </button>
+
+        <!-- Error Message -->
+        <p id="error-message" class="text-red-400 text-center mt-4 text-sm"></p>
+
+    </div>
+
+    <script type="module">
+        // --- DOM Elements ---
+        const modeGenerateBtn = document.getElementById('mode-generate');
+        const modeEditBtn = document.getElementById('mode-edit');
+        const uploadContainer = document.getElementById('upload-container');
+        const fileUpload = document.getElementById('file-upload');
+        const imageDisplay = document.getElementById('image-display');
+        const imagePlaceholder = document.getElementById('image-placeholder');
+        const placeholderText = document.getElementById('placeholder-text');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const promptInput = document.getElementById('prompt-input');
+        const actionButton = document.getElementById('action-button');
+        const errorMessage = document.getElementById('error-message');
+        const ideaButton = document.getElementById('idea-button');
+
+        // --- App State ---
+        let currentMode = 'generate'; // 'generate' or 'edit'
+        let base64ImageData = null;
+        let imageMimeType = null;
+        let isLoading = false;
+        
+        // --- API Configuration ---
+        const apiKey = ""; // Leave empty, handled by environment
+        const imageApiUrl = `https://generativanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`;
+        const textApiUrl = `https://generativanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+        // --- Event Listeners ---
+
+        modeGenerateBtn.addEventListener('click', () => setMode('generate'));
+        modeEditBtn.addEventListener('click', () => setMode('edit'));
+        
+        fileUpload.addEventListener('change', handleImageUpload);
+        actionButton.addEventListener('click', handleActionClick);
+        ideaButton.addEventListener('click', getPromptIdea);
+
+        // --- Functions ---
+
+        /**
+         * Sets the application mode ('generate' or 'edit')
+         */
+        function setMode(mode) {
+            currentMode = mode;
+            errorMessage.textContent = ''; // Clear errors
+
+            if (mode === 'generate') {
+                // Style buttons
+                modeGenerateBtn.classList.add('bg-purple-600', 'text-white');
+                modeEditBtn.classList.remove('bg-purple-600', 'text-white');
+                modeEditBtn.classList.add('text-gray-300');
+                
+                // UI changes
+                uploadContainer.classList.add('hidden');
+                actionButton.textContent = 'Generate';
+                placeholderText.textContent = 'Your generated image will appear here.';
+                
+                // Clear uploaded image data
+                base64ImageData = null;
+                imageMimeType = null;
+                if (!imageDisplay.src.startsWith('data:image/png;base64,')) { // Don't clear a generated image
+                    imageDisplay.src = '';
+                    imageDisplay.classList.add('hidden');
+                    imagePlaceholder.classList.remove('hidden');
+                }
+
+            } else { // 'edit' mode
+                // Style buttons
+                modeEditBtn.classList.add('bg-purple-600', 'text-white');
+                modeGenerateBtn.classList.remove('bg-purple-600', 'text-white');
+                modeGenerateBtn.classList.add('text-gray-300');
+                
+                // UI changes
+                uploadContainer.classList.remove('hidden');
+                actionButton.textContent = 'Edit My Pic';
+                placeholderText.textContent = 'Upload your photo to start editing.';
+
+                // Clear any previous generated image to show placeholder
+                imageDisplay.src = '';
+                imageDisplay.classList.add('hidden');
+                imagePlaceholder.classList.remove('hidden');
+            }
+        }
+
+        /**
+         * Handles the file upload event
+         */
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                return;
+            }
+
+            if (!file.type.startsWith('image/')) {
+                showError('Please upload a valid image file (PNG or JPEG).');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const dataUrl = e.target.result;
+                imageDisplay.src = dataUrl;
+                imageDisplay.classList.remove('hidden');
+                imagePlaceholder.classList.add('hidden');
+                
+                // Store base64 data and MIME type
+                base64ImageData = dataUrl.split(',')[1];
+                imageMimeType = file.type;
+                errorMessage.textContent = '';
+            };
+            reader.onerror = () => {
+                showError('Failed to read the image file.');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        /**
+         * Handles the main action button click (Generate or Edit)
+         */
+        function handleActionClick() {
+            const prompt = promptInput.value;
+
+            if (!prompt) {
+                showError('Please enter a prompt.');
+                return;
+            }
+            
+            if (currentMode === 'edit' && !base64ImageData) {
+                showError('Please upload an image to edit.');
+                return;
+            }
+
+            // Start the generation process
+            generateAiImage(prompt);
+        }
+
+        /**
+         * ✨ New Feature: Gets a prompt idea from the text LLM
+         */
+        async function getPromptIdea() {
+            ideaButton.disabled = true;
+            ideaButton.textContent = '...';
+            errorMessage.textContent = ''; // Clear old errors
+
+            const systemPrompt = `You are an AI assistant that generates short, creative prompts for an AI image model.
+- If the user asks for a 'generation' prompt, provide a detailed scene (e.g., 'A bioluminescent jellyfish floating through a neon-lit cyberpunk city').
+- If the user asks for an 'editing' prompt, provide a specific action (e.g., 'Make the hair cosmic purple with stars', 'Change the background to a surreal desert landscape', 'Add a small, friendly robot companion on the shoulder').
+- Rule: Provide only the prompt text, with no introductory phrases (like 'Here is a prompt:') or surrounding quotation marks. Keep it to a single line.`;
+            
+            const userQuery = currentMode === 'generate' 
+                ? "Give me a creative 'generation' prompt." 
+                : "Give me a creative 'editing' prompt.";
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                },
+            };
+
+            try {
+                const response = await callApiWithRetry(textApiUrl, payload);
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.statusText}`);
+                }
+                const result = await response.json();
+                const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                
+                if (text) {
+                    promptInput.value = text.trim();
+                } else {
+                    console.error('No text in response:', result);
+                    showError('Could not generate an idea.');
+                }
+                
+            } catch (error) {
+                console.error('Error getting prompt idea:', error);
+                showError('Failed to get idea. Please try again.');
+            } finally {
+                ideaButton.disabled = false;
+                ideaButton.textContent = '✨ Get Idea';
+            }
+        }
+
+        /**
+         * Makes the API call to the Gemini model
+         */
+        async function generateAiImage(prompt) {
+            setLoading(true);
+            
+            // Construct the payload
+            const parts = [{ text: prompt }];
+
+            if (currentMode === 'edit' && base64ImageData && imageMimeType) {
+                parts.push({
+                    inlineData: {
+                        mimeType: imageMimeType,
+                        data: base64ImageData
+                    }
+                });
+            }
+
+            const payload = {
+                contents: [{ parts: parts }],
+                generationConfig: {
+                    responseModalities: ['TEXT', 'IMAGE']
+                },
+            };
+
+            try {
+                // Call the API with retry logic
+                const response = await callApiWithRetry(imageApiUrl, payload);
+                if (!response.ok) {
+                    const errorBody = await response.json();
+                    console.error("API Error Body:", errorBody);
+                    throw new Error(`API error: ${response.statusText} - ${errorBody?.error?.message || 'Unknown error'}`);
+                }
+
+                const result = await response.json();
+                
+                // Find the image data in the response
+                const base64Data = result?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+
+                if (base64Data) {
+                    const imageUrl = `data:image/png;base64,${base64Data}`;
+                    imageDisplay.src = imageUrl;
+                    imageDisplay.classList.remove('hidden');
+                    imagePlaceholder.classList.add('hidden');
+                    // In edit mode, update the base64 data for further edits
+                    if (currentMode === 'edit') {
+                        base64ImageData = base64Data;
+                        imageMimeType = 'image/png';
+                    }
+                } else {
+                    console.error('No image data in response:', result);
+                    showError('Failed to generate image. The model may not have returned an image.');
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                showError('An error occurred. Please try again.');
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        /**
+         * Implements exponential backoff for API calls
+         */
+        async function callApiWithRetry(url, payload, retries = 3, delay = 1000) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    // Check for specific retryable errors if needed
+                    if (!response.ok && response.status === 429) { // Too Many Requests
+                        throw new Error('Rate limit exceeded');
+                    }
+                    
+                    return response; // Success
+
+                } catch (error) {
+                    if (i === retries - 1) {
+                        // Last retry, re-throw the error
+                        throw error;
+                    }
+                    // Wait for the delay and double it for the next attempt
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2;
+                }
+            }
+        }
+
+        /**
+         * Shows or hides the loading state
+         */
+        function setLoading(isLoading) {
+            if (isLoading) {
+                actionButton.disabled = true;
+                actionButton.textContent = 'Generating...';
+                loadingSpinner.classList.remove('hidden');
+                errorMessage.textContent = '';
+            } else {
+                actionButton.disabled = false;
+                actionButton.textContent = currentMode === 'generate' ? 'Generate' : 'Edit My Pic';
+                loadingSpinner.classList.add('hidden');
+            }
+        }
+
+        /**
+         * Displays an error message to the user
+         */
+        function showError(message) {
+            errorMessage.textContent = message;
+        }
+
+        // Initialize the app
+        setMode('generate');
+
+    </script>
+</body>
+</html>
